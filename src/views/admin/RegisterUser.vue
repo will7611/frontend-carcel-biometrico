@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted } from 'vue';
-import axios from 'axios';
+import api from '../../services/api';
 import { UserPlus, Camera, Save, RefreshCw, Search } from 'lucide-vue-next';
 
 const video = ref(null);
@@ -30,7 +30,7 @@ const startCamera = async () => {
 
 const fetchReclusos = async () => {
   try {
-    const res = await axios.get('http://127.0.0.1:8000/reclusos'); // Asegúrate de tener este endpoint
+    const res = await api.get('/reclusos'); // Asegúrate de tener este endpoint
     reclusos.value = res.data;
   } catch (err) { console.error("Error cargando reclusos"); }
 };
@@ -63,7 +63,7 @@ const saveVisitor = async () => {
       data.append('con_ninos', formData.value.con_ninos);
       data.append('file', blob, 'visitor.jpg');
 
-      await axios.post('http://127.0.0.1:8000/auth/register-visitante', data);
+      await api.post('/auth/register-visitante', data);
       message.value = { type: 'success', text: 'Visitante enrolado correctamente.' };
       resetForm();
     }, 'image/jpeg');

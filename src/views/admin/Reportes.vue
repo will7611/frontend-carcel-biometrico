@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
-import axios from 'axios';
+import api from '../../services/api';
 import { Download, Search, FileSpreadsheet, Calendar, User, Clock } from 'lucide-vue-next';
 
 const registros = ref([]);
@@ -11,7 +11,7 @@ const busqueda = ref('');
 const fetchReporte = async () => {
   loading.value = true;
   try {
-    const res = await axios.get(`http://127.0.0.1:8000/access/reporte-detallado?rango=${filtroTiempo.value}`);
+    const res = await api.get(`/access/reporte-detallado?rango=${filtroTiempo.value}`);
     registros.value = res.data;
   } catch (err) {
     console.error("Error al cargar reportes", err);
@@ -31,7 +31,8 @@ const registrosFiltrados = computed(() => {
 });
 
 const descargarExcel = () => {
-  window.open('http://127.0.0.1:8000/access/exportar-excel', '_blank');
+  const baseURL = import.meta.env.VITE_API_URL;
+  window.open(`${baseURL}/access/exportar-excel`, '_blank');
 };
 
 onMounted(fetchReporte);

@@ -1,46 +1,63 @@
 import { defineStore } from 'pinia';
-import axios from 'axios';
+import api from '../services/api';
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     token: localStorage.getItem('token') || null,
     user: JSON.parse(localStorage.getItem('user')) || null,
   }),
+
   getters: {
     isAuthenticated: (state) => !!state.token,
-    isAdmin: (state) => state.user?.role === 'admin',
+    userRole: (state) => state.user?.role || 'invitado',
   },
+
   actions: {
     async login(username, password) {
+      // FastAPI espera un FormData para el OAuth2 Password Flow
       const formData = new FormData();
       formData.append('username', username);
       formData.append('password', password);
 
       try {
-        const response = await axios.post('http://127.0.0.1:8000/auth/login', formData);
+        const response = await api.post('/auth/login', formData);
+        
+        // 1. Guardar el token
         this.token = response.data.access_token;
         
-        // Decodificar payload básico (puedes usar jwt-decode si prefieres)
-        const base64Url = this.token.split('.')[1];
-        const payload = JSON.parse(window.atob(base64Url));
-        
-        this.user = { username: payload.sub, role: payload.role };
-        
+        // 2. Decodificar el Payload del JWT de forma segura
+        try {
+          const base64Url = this.token.split('.')[1];
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const payload = JSON.parse(window.atob(base64));
+          
+          this.user = { 
+            username: payload.sub, 
+            role: payload.role || 'user' 
+          };
+        } catch (e) {
+          console.error("Error decodificando token:", e);
+          this.user = { username: username, role: 'user' };
+        }
+
+        // 3. Persistencia
         localStorage.setItem('token', this.token);
         localStorage.setItem('user', JSON.stringify(this.user));
-        
-        // Configurar axios para futuras peticiones
-        axios.defaults.headers.common['Authorization'] = `Bearer ${this.token}`;
+
+        return true;
       } catch (error) {
-        throw error.response.data.detail || 'Error en el login';
+        // Capturamos el detalle del error que envía FastAPI
+        const errorMsg = error.response?.data?.detail || 'Error de autenticación';
+        throw errorMsg;
       }
     },
+
     logout() {
       this.token = null;
       this.user = null;
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      delete axios.defaults.headers.common['Authorization'];
+      // Al usar el servicio 'api', el interceptor dejará de enviar el token automáticamente
     }
   }
 });

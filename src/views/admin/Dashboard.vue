@@ -1,6 +1,6 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue';
-import axios from 'axios';
+import api from '../../services/api';
 import { Users, LogIn, LogOut, Baby, ShieldCheck, Download, Search } from 'lucide-vue-next';
 
 const reporte = ref([]);
@@ -9,8 +9,8 @@ const filtroSearch = ref('');
 
 const loadData = async () => {
   const [resReporte, resStats] = await Promise.all([
-    axios.get('http://127.0.0.1:8000/access/reporte-general'),
-    axios.get('http://127.0.0.1:8000/access/estadisticas')
+    api.get('/access/reporte-general'),
+    api.get('/access/estadisticas')
   ]);
   reporte.value = resReporte.data;
   stats.value = resStats.data;
