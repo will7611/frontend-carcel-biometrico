@@ -1,94 +1,82 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from '../store/auth';
-import Swal from 'sweetalert2';
+
+// 1. Importación de TODOS los componentes
+import Login from '../views/auth/Login.vue';
+import AdminLayout from '../layouts/AdminLayout.vue';
+import Dashboard from '../views/admin/Dashboard.vue';
+import Reportes from '../views/admin/Reportes.vue';
+import Personal from '../views/admin/Personal.vue';
+import Pabellones from '../views/admin/Pabellones.vue';
+import Reclusos from '../views/admin/Reclusos.vue';
+import Visitantes from '../views/admin/Visitantes.vue';
+import Scan from '../views/camera/Scan.vue'; 
+
+const routes = [
+  {
+    path: '/',
+    name: 'login',
+    component: Login,
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/admin',
+    component: AdminLayout,
+    meta: { requiresAuth: true },
+    children: [
+      { path: '/dashboard', name: 'dashboard', component: Dashboard },
+      { path: '/reportes', name: 'reportes', component: Reportes },
+      { path: '/personal', name: 'personal', component: Personal },
+      { path: '/pabellones', name: 'pabellones', component: Pabellones },
+      { path: '/reclusos', name: 'reclusos', component: Reclusos },
+      { path: '/visitantes', name: 'visitantes', component: Visitantes },
+      { path: '/scan', name: 'scan', component: Scan }
+    ]
+  }
+];
 
 const router = createRouter({
   history: createWebHistory(),
-  routes: [
-    { 
-      path: '/', 
-      name: 'login',
-      component: () => import('../views/auth/Login.vue'),
-    },
-    {
-      path: '/',
-      component: () => import('../layouts/AdminLayout.vue'),
-      meta: { requiresAuth: true },
-      children: [
-        { 
-          path: 'dashboard', 
-          name: 'dashboard', 
-          component: () => import('../views/admin/Dashboard.vue'),
-          meta: { roles: ['admin', 'policia'] } // Definimos acceso para ambos
-        },
-        
-        // Módulos de Gestión (Solo Alcaide/Admin)
-        { 
-          path: 'pabellones', 
-          name: 'pabellones', 
-          component: () => import('../views/admin/Pabellones.vue'),
-          meta: { roles: ['admin'] } 
-        },
-        { 
-          path: 'personal', 
-          name: 'personal', 
-          component: () => import('../views/admin/Personal.vue'),
-          meta: { roles: ['admin'] } 
-        },
-        { 
-          path: 'reclusos', 
-          name: 'reclusos', 
-          component: () => import('../views/admin/Reclusos.vue'), 
-          meta: { roles: ['admin'] } 
-        },
-        { 
-          path: 'reportes', 
-          name: 'reportes', 
-          component: () => import('../views/admin/Reportes.vue'),
-          meta: { roles: ['admin'] } 
-        },
-
-        // Módulos Operativos (Admin y Policia)
-        { 
-          path: 'visitantes', 
-          name: 'visitantes', 
-          component: () => import('../views/admin/Visitantes.vue'),
-          meta: { roles: ['admin', 'policia'] } 
-        },
-        { 
-          path: 'scan', 
-          name: 'scan', 
-          component: () => import('../views/camera/Scan.vue'), 
-          meta: { roles: ['admin', 'policia'] }
-        },
-      ]
-    },
-    { path: '/:pathMatch(.*)*', redirect: '/' }
-  ]
+  routes
 });
 
-// Guardia de seguridad optimizado
-router.beforeEach(async (to) => {
-  const auth = useAuthStore();
-  const userRole = auth.user?.role;
-
-  // 1. Verificar Autenticación
-  if (to.meta.requiresAuth && !auth.isAuthenticated) {
-    return { name: 'login' };
+// ==============================================================================
+// GUARDIA DE NAVEGACIÓN (Control por Roles Institucionales)
+// ==============================================================================
+router.beforeEach((to, from) => {
+  const authStore = useAuthStore();
+  const userRole = authStore.userRole; // Obtenemos el rol (admin, tecnico, policia)
+  
+  // 1. Protección de sesión básica
+  if (to.meta.requiresAuth && !authStore.isAuthenticated) {
+    return { name: 'login' }; 
   }
 
-  // 2. Verificar Roles (Usando la lógica de "roles" en plural siempre)
-  if (to.meta.roles && !to.meta.roles.includes(userRole)) {
-    Swal.fire({
-      icon: 'error',
-      title: 'ACCESO RESTRINGIDO',
-      text: 'No tiene los privilegios de Administrador para este módulo.',
-      background: '#111418',
-      color: '#fff',
-      confirmButtonColor: '#10b981'
-    });
+  // 2. Redirección si ya está autenticado
+  if (to.name === 'login' && authStore.isAuthenticated) {
     return { name: 'dashboard' };
   }
+
+  // --------------------------------------------------------------------------
+  // 3. RESTRICCIONES DE SEGURIDAD POR ROL
+  // --------------------------------------------------------------------------
+
+  // A. Restricción para TÉCNICO: No puede ver Población Penal (Reclusos)
+  if (to.name === 'reclusos' && userRole === 'tecnico') {
+    console.warn("ALERTA: El Técnico no tiene autorización para ver la Población Penal.");
+    return { name: 'dashboard' };
+  }
+
+  // B. Restricción para PERSONAL Y PABELLONES: Solo para ADMINISTRADORES
+  // Ni el Policía ni el Técnico pueden entrar aquí
+  const soloAdmin = ['personal', 'pabellones'];
+  if (soloAdmin.includes(to.name) && userRole !== 'admin') {
+    console.warn(`ACCESO DENEGADO: El rol ${userRole} no puede gestionar este módulo.`);
+    return { name: 'dashboard' };
+  }
+
+  // 4. Si pasa todas las pruebas, adelante
+  return true;
 });
 
 export default router;

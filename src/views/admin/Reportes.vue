@@ -1,130 +1,90 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, watch } from 'vue';
 import api from '../../services/api';
-import { Download, Search, FileSpreadsheet, Calendar, User, Clock } from 'lucide-vue-next';
+import { FileSpreadsheet, Search, RefreshCw, Download, FileText, Calendar } from 'lucide-vue-next';
 
 const registros = ref([]);
 const loading = ref(true);
 const filtroTiempo = ref('todos');
 const busqueda = ref('');
+const fechaInicio = ref('');
+const fechaFin = ref('');
 
 const fetchReporte = async () => {
   loading.value = true;
   try {
-    const res = await api.get(`/access/reporte-detallado?rango=${filtroTiempo.value}`);
-    registros.value = res.data;
-  } catch (err) {
-    console.error("Error al cargar reportes", err);
-  } finally {
-    loading.value = false;
+    const params = { rango: filtroTiempo.value, busqueda: busqueda.value };
+    if (fechaInicio.value && fechaFin.value) {
+      params.fecha_inicio = fechaInicio.value;
+      params.fecha_fin = fechaFin.value;
+    }
+    const res = await api.get('/access/reporte-detallado', { params });
+    registros.value = Array.isArray(res.data) ? res.data : [];
+  } catch (err) { console.error("Error", err); } finally { loading.value = false; }
+};
+
+const exportar = (tipo) => {
+  let url = `http://127.0.0.1:8000/access/exportar-${tipo}?rango=${filtroTiempo.value}&busqueda=${busqueda.value}`;
+  if (fechaInicio.value && fechaFin.value) {
+    url += `&fecha_inicio=${fechaInicio.value}&fecha_fin=${fechaFin.value}`;
   }
+  window.open(url, '_blank');
 };
 
-const registrosFiltrados = computed(() => {
-  if (!busqueda.value) return registros.value;
-  const b = busqueda.value.toLowerCase();
-  return registros.value.filter(r => 
-    r.visitante.toLowerCase().includes(b) || 
-    r.ci.includes(b) || 
-    r.recluso.toLowerCase().includes(b)
-  );
-});
-
-const descargarExcel = () => {
-  const baseURL = import.meta.env.VITE_API_URL;
-  window.open(`${baseURL}/access/exportar-excel`, '_blank');
-};
+const setFiltro = (t) => { filtroTiempo.value = t; fechaInicio.value = ''; fechaFin.value = ''; fetchReporte(); };
 
 onMounted(fetchReporte);
+watch(busqueda, () => fetchReporte());
 </script>
 
 <template>
-  <div class="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-    <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-      <div>
-        <h2 class="text-2xl font-black text-white uppercase italic tracking-tighter flex items-center gap-3">
-          <FileSpreadsheet class="text-brand h-6 w-6" />
-          Libro de Guardia y Visitas
-        </h2>
-        <p class="text-[10px] text-slate-500 font-bold uppercase tracking-[0.3em]">Auditoría Biométrica de Flujo Penal</p>
+  <div class="p-6 lg:p-10 bg-[#f8fafc] min-h-screen">
+    <header class="flex flex-col lg:flex-row justify-between items-center gap-6 bg-white p-10 rounded-[2.5rem] border-2 border-slate-200 shadow-xl mb-8">
+      <div class="flex items-center gap-6">
+        <div class="p-4 bg-[#2d5a27] rounded-3xl shadow-xl"><FileSpreadsheet class="h-10 w-10 text-white" /></div>
+        <div>
+          <h1 class="text-3xl font-black text-[#1a3818] uppercase">Libro de Guardia</h1>
+          <p class="text-[11px] font-extrabold text-slate-500 uppercase tracking-widest">Policía Boliviana</p>
+        </div>
       </div>
+      <div class="flex gap-4">
+        <button @click="exportar('excel')" class="px-8 py-4 bg-[#2d5a27] text-white rounded-2xl text-xs font-black uppercase shadow-lg"><Download class="h-5 w-5 inline mr-2" /> EXCEL</button>
+        <button @click="exportar('pdf')" class="px-8 py-4 bg-slate-800 text-white rounded-2xl text-xs font-black uppercase shadow-lg"><FileText class="h-5 w-5 inline mr-2" /> PDF</button>
+      </div>
+    </header>
 
-      <button @click="descargarExcel" class="group flex items-center gap-3 px-8 py-3.5 bg-brand text-white rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-xl shadow-brand/20 hover:scale-105 transition-all">
-        <Download class="h-4 w-4 group-hover:animate-bounce" /> Descargar Reporte Completo
-      </button>
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-center mb-8">
+      <div class="lg:col-span-3 bg-white p-2 rounded-2xl border-2 border-slate-200 flex gap-1">
+        <button v-for="t in ['hoy', 'semana', 'mes', 'todos']" :key="t" @click="setFiltro(t)" :class="filtroTiempo === t ? 'bg-[#2d5a27] text-white' : 'text-slate-400'" class="flex-1 py-3 rounded-xl text-[11px] font-black uppercase">{{ t }}</button>
+      </div>
+      <div class="lg:col-span-4 bg-white p-2 rounded-2xl border-2 border-slate-200 flex items-center gap-3">
+        <Calendar class="h-5 w-5 text-[#2d5a27] ml-2" />
+        <input type="date" v-model="fechaInicio" class="text-xs font-bold outline-none bg-transparent" />
+        <span class="text-slate-400 font-bold text-xs">AL</span>
+        <input type="date" v-model="fechaFin" @change="fetchReporte" class="text-xs font-bold outline-none bg-transparent" />
+      </div>
+      <div class="lg:col-span-5 relative">
+        <Search class="absolute left-6 top-1/2 -translate-y-1/2 h-6 w-6 text-[#2d5a27]" />
+        <input v-model="busqueda" placeholder="BUSCAR NOMBRE O CÉDULA..." class="w-full bg-white border-2 border-slate-200 pl-16 pr-6 py-4 rounded-[1.5rem] text-sm font-black text-slate-800 outline-none focus:border-[#2d5a27] shadow-sm" />
+      </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div class="bg-[#111418] p-2 rounded-2xl border border-white/5 flex gap-1">
-        <button v-for="t in ['hoy', 'semana', 'mes', 'todos']" :key="t"
-          @click="filtroTiempo = t; fetchReporte()"
-          :class="filtroTiempo === t ? 'bg-brand text-white' : 'text-slate-500 hover:text-white'"
-          class="flex-1 py-2.5 rounded-xl text-[9px] font-black uppercase transition-all"
-        >{{ t }}</button>
-      </div>
-
-      <div class="relative group">
-        <Search class="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 group-focus-within:text-brand transition-colors" />
-        <input v-model="busqueda" placeholder="Buscar por Visitante, CI o Interno..." 
-          class="w-full bg-[#111418] border border-white/5 pl-12 pr-4 py-4 rounded-2xl text-[11px] text-white outline-none focus:border-brand/50 transition-all shadow-inner" />
-      </div>
-    </div>
-
-    <div class="bg-[#111418] rounded-[2.5rem] border border-white/5 overflow-hidden shadow-2xl">
-      <div class="overflow-x-auto">
-        <table class="w-full text-left border-separate border-spacing-0">
-          <thead>
-            <tr class="bg-black/40 text-[10px] font-black text-slate-500 uppercase tracking-widest">
-              <th class="px-8 py-5 border-b border-white/5">Identificación Visitante</th>
-              <th class="px-8 py-5 border-b border-white/5">Pabellón</th>
-              <th class="px-8 py-5 border-b border-white/5">Interno Asignado</th>
-              <th class="px-8 py-5 border-b border-white/5"><div class="flex items-center gap-2"><Clock class="h-3 w-3" /> Entrada</div></th>
-              <th class="px-8 py-5 border-b border-white/5"><div class="flex items-center gap-2"><Clock class="h-3 w-3" /> Salida</div></th>
-              <th class="px-8 py-5 border-b border-white/5 text-right">Estado</th>
-            </tr>
-          </thead>
-          <tbody class="text-[11px] font-bold text-white/90">
-            <tr v-for="r in registrosFiltrados" :key="r.id" class="hover:bg-white/[0.02] transition-colors group">
-              <td class="px-8 py-5 border-b border-white/5">
-                <div class="flex flex-col">
-                  <span class="text-white tracking-tight">{{ r.visitante }}</span>
-                  <span class="text-[9px] text-slate-500 font-black">CI: {{ r.ci }}</span>
-                </div>
-              </td>
-              <td class="px-8 py-5 border-b border-white/5">
-                <span class="px-3 py-1 bg-brand/10 border border-brand/20 text-brand rounded-lg text-[9px] font-black uppercase">
-                  {{ r.pabellon_id || r.pabellon }}
-                </span>
-              </td>
-              <td class="px-8 py-5 border-b border-white/5 opacity-60">
-                <div class="flex items-center gap-2">
-                  <User class="h-3 w-3 text-slate-700" /> {{ r.recluso }}
-                </div>
-              </td>
-              <td class="px-8 py-5 border-b border-white/5 text-slate-400 font-mono">{{ r.entrada }}</td>
-              <td class="px-8 py-5 border-b border-white/5 font-mono">
-                <span :class="!r.fecha_salida || r.salida === 'DENTRO' ? 'text-brand animate-pulse' : 'text-slate-500'">
-                  {{ r.salida }}
-                </span>
-              </td>
-              <td class="px-8 py-5 border-b border-white/5 text-right">
-                <span :class="!r.fecha_salida || r.salida === 'DENTRO' ? 'bg-brand/20 text-brand' : 'bg-white/5 text-slate-500'" 
-                  class="px-3 py-1.5 rounded-full text-[8px] font-black uppercase tracking-tighter">
-                  {{ !r.fecha_salida || r.salida === 'DENTRO' ? 'En Recinto' : 'Finalizado' }}
-                </span>
-              </td>
-            </tr>
-            <tr v-if="registrosFiltrados.length === 0">
-              <td colspan="6" class="px-8 py-20 text-center">
-                <div class="flex flex-col items-center opacity-20">
-                  <FileSpreadsheet class="h-12 w-12 mb-4" />
-                  <p class="text-[10px] font-black uppercase tracking-[0.3em]">No se encontraron registros en este periodo</p>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+    <div class="bg-white rounded-[3rem] border-2 border-slate-200 overflow-hidden shadow-2xl">
+      <div v-if="loading" class="py-20 text-center"><RefreshCw class="animate-spin h-10 w-10 mx-auto text-[#2d5a27]" /></div>
+      <table v-else class="w-full text-left text-[12px] font-bold uppercase">
+        <thead class="bg-slate-100 border-b-2 border-slate-200 text-slate-600 tracking-widest">
+          <tr><th class="px-10 py-6">Visitante</th><th class="px-10 py-6 text-center">Interno</th><th class="px-10 py-6 text-center">Entrada</th><th class="px-10 py-6 text-center">Salida</th><th class="px-10 py-6 text-right">Estado</th></tr>
+        </thead>
+        <tbody>
+          <tr v-for="r in registros" :key="r.id" class="border-b-2 border-slate-50 hover:bg-slate-50">
+            <td class="px-10 py-5"><span class="text-slate-900 block font-black">{{ r.visitante }}</span><span class="text-[10px] text-[#2d5a27] font-black">CI: {{ r.ci }}</span></td>
+            <td class="px-10 py-5 text-center text-slate-800">{{ r.recluso }}</td>
+            <td class="px-10 py-5 text-center font-mono text-[#2d5a27] font-black">{{ r.entrada }}</td>
+            <td class="px-10 py-5 text-center font-mono text-slate-900 font-black"><span :class="r.esta_dentro ? 'animate-pulse text-[#2d5a27]' : ''">{{ r.salida }}</span></td>
+            <td class="px-10 py-5 text-right"><span :class="r.esta_dentro ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : 'bg-slate-200 text-slate-600 border-slate-300'" class="px-4 py-2 rounded-xl text-[9px] font-black uppercase border-2">{{ r.esta_dentro ? 'En Recinto' : 'Finalizado' }}</span></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </template>

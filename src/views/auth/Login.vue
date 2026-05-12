@@ -2,8 +2,9 @@
 import { ref } from 'vue';
 import { useAuthStore } from '../../store/auth';
 import { useRouter } from 'vue-router';
+import api from '../../services/api'; // <-- Importamos api directamente
 import { Lock, User, Loader2, Award, Scale } from 'lucide-vue-next';
-import escudoPoliciaUrl from '../../assets/escudo_policia.jpg'; // <-- Importamos el escudo
+import escudoPoliciaUrl from '../../assets/escudo_policia.jpg';
 
 const authStore = useAuthStore();
 const router = useRouter();
@@ -16,11 +17,37 @@ const isLoading = ref(false);
 const handleLogin = async () => {
   error.value = '';
   isLoading.value = true;
+  
   try {
-    await authStore.login(username.value, password.value);
-    router.push('/dashboard');
+    // 1. Preparamos los datos exactamente como los pide FastAPI (Formulario)
+    const formData = new FormData();
+    formData.append('username', username.value);
+    formData.append('password', password.value);
+
+    // 2. Hacemos la petición directamente para evitar el fallo del store
+    const res = await api.post('/auth/login', formData);
+
+    // 3. Evaluamos la respuesta exitosa del Backend
+    if (res.data && res.data.status === 'success') {
+      
+      // Guardamos el pase de acceso en el navegador
+      localStorage.setItem('token', res.data.access_token);
+      localStorage.setItem('user', JSON.stringify(res.data.user));
+
+      // Forzamos la actualización del Store por si la aplicación lo requiere
+      authStore.token = res.data.access_token;
+      authStore.user = res.data.user;
+      authStore.isAuthenticated = true;
+
+      // 4. ¡Acceso concedido! Redirigimos al Mando Central
+      router.push('/dashboard');
+      
+    } else {
+      error.value = res.data.message || 'Credenciales incorrectas';
+    }
   } catch (err) {
-    error.value = err || 'Error de conexión con el Comando Central';
+    // Si FastAPI nos bloquea (ej. Contraseña mala), atrapamos su mensaje exacto
+    error.value = err.response?.data?.detail || 'Error de autenticación del servidor';
   } finally {
     isLoading.value = false;
   }

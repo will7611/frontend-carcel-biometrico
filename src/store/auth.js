@@ -9,12 +9,12 @@ export const useAuthStore = defineStore('auth', {
 
   getters: {
     isAuthenticated: (state) => !!state.token,
-    userRole: (state) => state.user?.role || 'invitado',
+    // LA SOLUCIÓN: Buscamos 'rol' (lo que manda el backend) o 'role' por seguridad
+    userRole: (state) => state.user?.rol || state.user?.role || 'invitado',
   },
 
   actions: {
     async login(username, password) {
-      // FastAPI espera un FormData para el OAuth2 Password Flow
       const formData = new FormData();
       formData.append('username', username);
       formData.append('password', password);
@@ -22,32 +22,23 @@ export const useAuthStore = defineStore('auth', {
       try {
         const response = await api.post('/auth/login', formData);
         
-        // 1. Guardar el token
-        this.token = response.data.access_token;
-        
-        // 2. Decodificar el Payload del JWT de forma segura
-        try {
-          const base64Url = this.token.split('.')[1];
-          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-          const payload = JSON.parse(window.atob(base64));
+        if (response.data && response.data.status === 'success') {
+          this.token = response.data.access_token;
           
-          this.user = { 
-            username: payload.sub, 
-            role: payload.role || 'user' 
-          };
-        } catch (e) {
-          console.error("Error decodificando token:", e);
-          this.user = { username: username, role: 'user' };
+          // ELIMINAMOS LA DECODIFICACIÓN JWT: 
+          // El backend ya nos manda el usuario listo y seguro en response.data.user
+          this.user = response.data.user; 
+
+          localStorage.setItem('token', this.token);
+          localStorage.setItem('user', JSON.stringify(this.user));
+          
+          return true;
+        } else {
+          throw response.data.message || 'Credenciales incorrectas';
         }
-
-        // 3. Persistencia
-        localStorage.setItem('token', this.token);
-        localStorage.setItem('user', JSON.stringify(this.user));
-
-        return true;
       } catch (error) {
-        // Capturamos el detalle del error que envía FastAPI
-        const errorMsg = error.response?.data?.detail || 'Error de autenticación';
+        // Atrapamos el error exacto que manda FastAPI (ej. "Contraseña incorrecta")
+        const errorMsg = error.response?.data?.detail || error.response?.data?.message || error || 'Error de conexión con el Comando Central';
         throw errorMsg;
       }
     },
@@ -57,7 +48,7 @@ export const useAuthStore = defineStore('auth', {
       this.user = null;
       localStorage.removeItem('token');
       localStorage.removeItem('user');
-      // Al usar el servicio 'api', el interceptor dejará de enviar el token automáticamente
+      window.location.href = "/"; // Expulsa al login de inmediato
     }
   }
 });
